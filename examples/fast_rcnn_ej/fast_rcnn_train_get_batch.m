@@ -181,6 +181,8 @@ for b=1:numel(batch)
   end
 
   rois = [rois [b*ones(1,nB) ; tbbox' ] ];
+  % tmp = [1 ; tbbox(1,:)']; 
+  % rois = repmat(tmp,1,64);
 end
 
 imo = zeros(maxH,maxW,size(imre{1},3),numel(batch),'single');

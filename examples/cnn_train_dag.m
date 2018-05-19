@@ -251,6 +251,9 @@ for t=1:params.batchSize:numel(subset)
     if strcmp(mode, 'train')
       net.mode = 'normal' ;
       net.accumulateParamDers = (s ~= 1) ;
+      if fix((t-1)/params.batchSize)+1 == 767
+        xx=1;
+      end
       net.eval(inputs, params.derOutputs, 'holdOn', s < params.numSubBatches) ;
     else
       net.mode = 'test' ;

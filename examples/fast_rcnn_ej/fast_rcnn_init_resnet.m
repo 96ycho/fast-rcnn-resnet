@@ -1,6 +1,8 @@
 function net=fast_rcnn_init_resnet(varargin)
 
 opts.piecewise=1;
+opts.layer=50;
+opts.cudnnWorkspaceLimit = 1024*1024*1024 ; % 1GB
 opts = vl_argparse(opts, varargin) ;
 
 net = dagnn.DagNN() ;
@@ -21,7 +23,8 @@ function Conv(name, ksize, depth, varargin)
                dagnn.Conv('size', [ksize ksize lastAdded.depth depth], ...
                           'stride', stride, ....
                           'pad', (ksize - 1) / 2, ...
-                          'hasBias', args.bias), ...
+                          'hasBias', args.bias, ...
+                          'opts', {'cudnnworkspacelimit', opts.cudnnWorkspaceLimit}), ...
                lastAdded.var, ...
                [name '_conv'], ...
                pars) ;
@@ -63,58 +66,67 @@ lastAdded.var = 'conv1' ;
 % -------------------------------------------------------------------------
 % Add intermediate sections
 % -------------------------------------------------------------------------
-
-for s = 2:5
-
-  switch s
-    case 2, sectionLen = 3 ;
-    case 3, sectionLen = 4 ; % 8 ;
-    case 4, sectionLen = 6 ; % 23 ; % 36 ;
-    case 5, sectionLen = 3 ;
-  end
-
-  % -----------------------------------------------------------------------
-  % Add intermediate segments for each section
-  for l = 1:sectionLen
-    depth = 2^(s+4) ;
-    sectionInput = lastAdded ;
-    name = sprintf('conv%d_%d', s, l)  ;
-
-    % Optional adapter layer
-    if l == 1
-      Conv([name '_adapt_conv'], 1, 2^(s+6), 'downsample', s >= 3, 'relu', false) ;
+function inter_layer(layerNum)
+  for s = 2:layerNum
+    switch s
+      case 2, sectionLen = 3 ;
+      case 3, sectionLen = 4 ; % 8 ;
+      case 4, sectionLen = 6 ; % 23 ; % 36 ;
+      case 5, sectionLen = 3 ;
     end
-    sumInput = lastAdded ;
 
-    % ABC: 1x1, 3x3, 1x1; downsample if first segment in section from
-    % section 2 onwards.
-    lastAdded = sectionInput ;
-    %Conv([name 'a'], 1, 2^(s+4), 'downsample', (s >= 3) & l == 1) ;
-    %Conv([name 'b'], 3, 2^(s+4)) ;
-    Conv([name 'a'], 1, 2^(s+4)) ;
-    Conv([name 'b'], 3, 2^(s+4), 'downsample', (s >= 3) & l == 1) ;
-    Conv([name 'c'], 1, 2^(s+6), 'relu', false) ;
+    % -----------------------------------------------------------------------
+    % Add intermediate segments for each section
+    for l = 1:sectionLen
+      depth = 2^(s+4) ;
+      sectionInput = lastAdded ;
+      name = sprintf('conv%d_%d', s, l)  ;
 
-    % Sum layer
-    net.addLayer([name '_sum'] , ...
-                 dagnn.Sum(), ...
-                 {sumInput.var, lastAdded.var}, ...
-                 [name '_sum']) ;
-    net.addLayer([name '_relu'] , ...
-                 dagnn.ReLU(), ...
-                 [name '_sum'], ...
-                 name) ;
-    lastAdded.var = name ;
+      % Optional adapter layer
+      if l == 1
+        Conv([name '_adapt_conv'], 1, 2^(s+6), 'downsample', s >= 3, 'relu', false) ;
+      end
+      sumInput = lastAdded ;
+
+      % ABC: 1x1, 3x3, 1x1; downsample if first segment in section from
+      % section 2 onwards.
+      lastAdded = sectionInput ;
+      Conv([name 'a'], 1, 2^(s+4)) ;
+      Conv([name 'b'], 3, 2^(s+4), 'downsample', (s >= 3) & l == 1) ;
+      Conv([name 'c'], 1, 2^(s+6), 'relu', false) ;
+
+      % Sum layer
+      net.addLayer([name '_sum'] , ...
+                   dagnn.Sum(), ...
+                   {sumInput.var, lastAdded.var}, ...
+                   [name '_sum']) ;
+      net.addLayer([name '_relu'] , ...
+                   dagnn.ReLU(), ...
+                   [name '_sum'], ...
+                   name) ;
+      lastAdded.var = name ;
+    end
   end
 end
 
-% net.addLayer('prediction_avg' , ...
-%              dagnn.Pooling('poolSize', [7 7], 'method', 'avg'), ...
-%              lastAdded.var, ...
-%              'prediction_avg') ;
-         
+if opts.layer=='50'
+  inter_layer(layerNum, 5);  
+else 
+  inter_layer(layerNum, 4);
+  % for image size
+  net.addLayer(...
+    'conv4_pool' , ...
+    dagnn.Pooling('poolSize', [3 3], ...
+                  'stride', 2, ...
+                  'pad', 1,  ...
+                  'method', 'max'), ...
+    lastAdded.var, ...
+    'conv4') ;
+  lastAdded.var= 'conv4' ;  
+end
+
 net.addLayer('fc6' , ...
-             dagnn.Conv('size', [7 7 2048 4096]), ...
+             dagnn.Conv('size', [7 7 1024 2048]), ...
              lastAdded.var, ...
              'fc6', ...
              {'fc6_f', 'fc6_b'}) ;
@@ -130,7 +142,7 @@ net.addLayer('relu6' , ...
 %              'drop6') ;
          
 net.addLayer('fc7' , ...
-             dagnn.Conv('size', [1 1 4096 4096]), ...
+             dagnn.Conv('size', [1 1 2048 4096]), ...
              'relu6', ...
              'fc7', ...
              {'fc7_f', 'fc7_b'}) ;
@@ -150,34 +162,6 @@ net.addLayer('prediction' , ...
              'relu7', ...
              'prediction', ...
              {'prediction_f', 'prediction_b'}) ;
-
-% -------------------------------------------------------------------------
-% net.addLayer('loss', ...
-%             dagnn.Loss('loss', 'softmaxlog') ,...
-%             {'prediction', 'label'}, ...
-%             'objective') ;
-%
-% net.addLayer('top1error', ...
-%             dagnn.Loss('loss', 'classerror'), ...
-%             {'prediction', 'label'}, ...
-%             'top1error') ;
-%
-% net.addLayer('top5error', ...
-%             dagnn.Loss('loss', 'topkerror', 'opts', {'topK', 5}), ...
-%             {'prediction', 'label'}, ...
-%             'top5error') ;
-% -------------------------------------------------------------------------
-        
-% Add drop-out layers.
-% relu6p = find(cellfun(@(a) strcmp(a.name, 'relu6'), net.layers)==1);
-% relu7p = find(cellfun(@(a) strcmp(a.name, 'relu7'), net.layers)==1);
-
-% drop6 = struct('type', 'dropout', 'rate', 0.5, 'name','drop6');
-% drop7 = struct('type', 'dropout', 'rate', 0.5, 'name','drop7');
-% net.layers = [net.layers(1:174) drop6 net.layers(174+1:176) drop7 net.layers(176+1:end)];
-
-% Convert to DagNN.
-% net = dagnn.DagNN.fromSimpleNN(net, 'canonicalNames', true) ;
 
 % Change loss for FC layers.
 nCls = 21;
@@ -204,7 +188,7 @@ vggdeep = false;
 pRelu5 = find(arrayfun(@(a) strcmp(a.name, 'relu5'), net.layers)==1);
 if isempty(pRelu5)
   vggdeep = true;
-  pRelu5 = find(arrayfun(@(a) strcmp(a.name, 'conv5_3_relu'), net.layers)==1);
+  pRelu5 = find(arrayfun(@(a) strcmp(a.name, 'conv4_pool'), net.layers)==1);
   if isempty(pRelu5)
     error('Cannot find last relu before fc');
   end

@@ -7,7 +7,6 @@ function [net, info] = fast_rcnn_train(varargin)
 % This file is part of the VLFeat library and is made available under
 % the terms of the BSD license (see the COPYING file).
 
-%opts.dataDir = fullfile(vl_rootnn, 'data','ILSVRC2012') ;
 addpath(fullfile(vl_rootnn,'examples','fast_rcnn','bbox_functions'));
 addpath(fullfile(vl_rootnn,'examples','fast_rcnn','datasets'));
 
@@ -17,17 +16,13 @@ opts.expDir    = fullfile(vl_rootnn, 'data', 'fast-rcnn-vgg16-pascal07') ;
 opts.imdbPath  = fullfile(opts.expDir, 'imdb.mat');
 
 opts.modelType = 'resnet-50' ;
+opts.layer = '50' ; % ['50', '50B', '101']
 opts.network = [] ;
 opts.networkType = 'dagnn' ;
 opts.batchNormalization = true ;
 opts.weightInitMethod = 'gaussian' ;
+opts.conserveMemory = true ;
 [opts, varargin] = vl_argparse(opts, varargin) ;
-
-% sfx = opts.modelType ;
-% if opts.batchNormalization, sfx = [sfx '-bnorm'] ; end
-% sfx = [sfx '-' opts.networkType] ;
-% opts.expDir = fullfile(vl_rootnn, 'data', ['imagenet12-' sfx]) ;
-% [opts, varargin] = vl_argparse(opts, varargin) ;
 
 opts.numFetchThreads = 12 ;
 opts.lite = false ;
@@ -40,7 +35,7 @@ opts.train.batchSize = 2 ;
 opts.train.numSubBatches = 1 ;
 opts.train.continue = true ;
 opts.train.prefetch = false ; % does not help for two images in a batch
-opts.train.learningRate = 1e-3 / 64 * [ones(1,6) 0.1*ones(1,6)];
+opts.train.learningRate = 1e-3 / 64 * [ones(1,6) 0.1*ones(1,6) 0.05*ones(1,3)];
 opts.train.weightDecay = 0.0005 ;
 % opts.train.numEpochs = 20 ;
 opts.train.derOutputs = {'losscls', 1, 'lossbbox', 1} ;
@@ -53,45 +48,11 @@ opts.train.numEpochs = numel(opts.train.learningRate) ;
 if ~isfield(opts.train, 'gpus'), opts.train.gpus = []; end;
 
 % -------------------------------------------------------------------------
-%                                                              Prepare data
-% -------------------------------------------------------------------------
-
-% -------------------------------------------------------------------------
-% -------------------------------------------------------------------------
-
-%addpath(fullfile(vl_rootnn,'examples','fast_rcnn','bbox_functions'));
-%addpath(fullfile(vl_rootnn,'examples','fast_rcnn','datasets'));
-
-%opts.dataDir   = fullfile(vl_rootnn, 'data') ;
-%opts.sswDir    = fullfile(vl_rootnn, 'data', 'SSW');
-%opts.expDir    = fullfile(vl_rootnn, 'data', 'fast-rcnn-vgg16-pascal07') ;
-%opts.imdbPath  = fullfile(opts.expDir, 'imdb.mat');
-
-%opts.piecewise = true;  % piecewise training (+bbox regression)
-%opts.train.gpus = [] ;
-%opts.train.batchSize = 2 ;
-%opts.train.numSubBatches = 1 ;
-%opts.train.continue = true ;
-%opts.train.prefetch = false ; % does not help for two images in a batch
-%opts.train.learningRate = 1e-3 / 64 * [ones(1,6) 0.1*ones(1,6)];
-%opts.train.weightDecay = 0.0005 ;
-%opts.train.numEpochs = 12 ;
-%opts.train.derOutputs = {'losscls', 1, 'lossbbox', 1} ;
-%opts.lite = false  ;
-%opts.numFetchThreads = 2 ;
-
-%opts = vl_argparse(opts, varargin) ;
-%display(opts);
-
-%opts.train.expDir = opts.expDir ;
-%opts.train.numEpochs = numel(opts.train.learningRate) ;
-
-% -------------------------------------------------------------------------
 %                                                    Network initialization
 % -------------------------------------------------------------------------
 net = fast_rcnn_init_resnet(...
-  'piecewise',opts.piecewise);
-
+  'piecewise',opts.piecewise, ...
+  'layer', opts.layer);
 
 if exist(opts.imdbPath,'file') == 2
   fprintf('Loading imdb...');
@@ -204,7 +165,7 @@ end
 
 net.rebuild();
 
-pfc8 = net.getLayerIndex('predcls') ;
+pfc8 = net.getLayerIndex('prediction') ;
 net.addLayer('probcls',dagnn.SoftMax(),net.layers(pfc8).outputs{1},...
   'probcls',{});
 
