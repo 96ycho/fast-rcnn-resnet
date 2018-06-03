@@ -11,7 +11,7 @@ run(fullfile(fileparts(mfilename('fullpath')), ...
   '..', '..', 'matlab', 'vl_setupnn.m')) ;
 
 addpath(fullfile(vl_rootnn, 'data', 'VOCdevkit', 'VOCcode'));
-addpath(genpath(fullfile(vl_rootnn, 'examples', 'fast_rcnn')));
+addpath(genpath(fullfile(vl_rootnn, 'examples', 'fast_rcnn_ej')));
 
 opts.dataDir   = fullfile(vl_rootnn, 'data') ;
 [opts, varargin] = vl_argparse(opts, varargin) ;

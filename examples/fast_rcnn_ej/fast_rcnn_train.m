@@ -31,8 +31,8 @@ opts.train = struct() ;
 
 opts.piecewise = true;  % piecewise training (+bbox regression)
 opts.train.gpus = [] ;
-opts.train.batchSize = 2 ;
-opts.train.numSubBatches = 1 ;
+opts.train.batchSize = 4 ;
+opts.train.numSubBatches = 2 ;
 opts.train.continue = true ;
 opts.train.prefetch = false ; % does not help for two images in a batch
 opts.train.learningRate = 1e-3 / 64 * [ones(1,6) 0.1*ones(1,6) 0.05*ones(1,3)];
