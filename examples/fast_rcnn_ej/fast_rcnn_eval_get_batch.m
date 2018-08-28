@@ -54,7 +54,7 @@ pboxes  = cell(1,numel(batch));
 
 % get fg and bg rois
 for b=1:numel(batch)
-  pbox   = imdb.boxes.pbox{batch(b)};
+  pbox = imdb.boxes.pbox{batch(b)};
 
   if size(pbox,2)~=4
     error('wrong box size');
@@ -65,6 +65,27 @@ end
 
 % rescale images and rois
 rois = [];
+
+% -------------------------------------------------------------------------
+% resize bbox
+% -------------------------------------------------------------------------
+
+function boxOut = bbox_resize(boxIn, scale1, scale2, szOut)
+
+if isempty(boxIn), boxOut = []; return; end
+
+boxOut(:,1) = scale1 * (boxIn(:,1)-1) + 1;
+boxOut(:,2) = scale2 * (boxIn(:,2)-1) + 1;
+boxOut(:,3) = scale1 * (boxIn(:,3)-1) + 1;
+boxOut(:,4) = scale2 * (boxIn(:,4)-1) + 1;
+
+boxOut = [max(1,round(boxOut(:,1))),...
+  max(1,round(boxOut(:,2))),...
+  min(szOut(2),round(boxOut(:,3))),...
+  min(szOut(1),round(boxOut(:,4)))];
+
+end
+
 for b=1:numel(batch)
   imSize = size(ims{b});
 
@@ -84,6 +105,12 @@ for b=1:numel(batch)
     imre{b} = ims{b};
   end
 
+%   % image resize [224,224,3]
+%   ssize=size(ims{b});
+%   factor1 = opts.imgSize/ssize(1);
+%   factor2 = opts.imgSize/ssize(2);
+%   imre{b} = imresize(ims{b}, [opts.imgSize opts.imgSize]);  
+  
   if imdb.boxes.flip(batch(b))
     im = imre{b};
     imre{b} = im(:,end:-1:1,:);
@@ -102,6 +129,7 @@ for b=1:numel(batch)
 
   nB = size(bbox,1);
   tbbox = bbox_scale(bbox,factor,[imreSize(2) imreSize(1)]);
+  % tbbox = bbox_resize(bbox,factor2,factor1,[imreSize(2) imreSize(1)]);
   if any(tbbox(:)<=0)
     error('tbbox error');
   end
@@ -118,6 +146,4 @@ for b=1:numel(batch)
   sz = size(imre{b});
   imo(1:sz(1),1:sz(2),:,b) = single(imre{b});
 end
-
-
-
+end

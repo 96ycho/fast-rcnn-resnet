@@ -87,6 +87,15 @@ inputs = [] ;
 
 obj.numPendingVarRefs = [obj.vars.fanout] ;
 for l = obj.executionOrder
+  if l==52
+      time=tic;
+  end
+  if l==170
+      time=tic;
+  end
+  if l==190
+      time=tic;
+  end
   time = tic ;
   obj.layers(l).block.forwardAdvanced(obj.layers(l)) ;
   obj.layers(l).forwardTime = toc(time) ;

@@ -47,7 +47,7 @@ opts.postEpochFn = [] ;  % postEpochFn(net,params,state) called after each epoch
 opts = vl_argparse(opts, varargin) ;
 
 if ~exist(opts.expDir, 'dir'), mkdir(opts.expDir) ; end
-if isempty(opts.train), opts.train = find(imdb.images.set==1) ; end
+if isempty(opts.train), opts.train = find(imdb.images.set==1); end
 if isempty(opts.val), opts.val = find(imdb.images.set==2) ; end
 if isscalar(opts.train) && isnumeric(opts.train) && isnan(opts.train)
   opts.train = [] ;

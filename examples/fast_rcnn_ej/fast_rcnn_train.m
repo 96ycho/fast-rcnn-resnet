@@ -7,21 +7,25 @@ function [net, info] = fast_rcnn_train(varargin)
 % This file is part of the VLFeat library and is made available under
 % the terms of the BSD license (see the COPYING file).
 
+run(fullfile(fileparts(mfilename('fullpath')), ...
+  '..', '..', 'matlab', 'vl_setupnn.m')) ;
 addpath(fullfile(vl_rootnn,'examples','fast_rcnn','bbox_functions'));
 addpath(fullfile(vl_rootnn,'examples','fast_rcnn','datasets'));
 
 opts.dataDir   = fullfile(vl_rootnn, 'data') ;
 opts.sswDir    = fullfile(vl_rootnn, 'data', 'SSW');
-opts.expDir    = fullfile(vl_rootnn, 'data', 'fast-rcnn-vgg16-pascal07') ;
+opts.expDir    = fullfile(vl_rootnn, 'data', 'fast-rcnn-resnet50b-pascal07') ;
 opts.imdbPath  = fullfile(opts.expDir, 'imdb.mat');
+opts.modelPath = fullfile(opts.dataDir, 'models', ...
+  'imagenet-resnet-50-dag.mat') ;
 
 opts.modelType = 'resnet-50' ;
-opts.layer = '50' ; % ['50', '50B', '101']
 opts.network = [] ;
 opts.networkType = 'dagnn' ;
 opts.batchNormalization = true ;
 opts.weightInitMethod = 'gaussian' ;
 opts.conserveMemory = true ;
+opts.roisize = 7 ;
 [opts, varargin] = vl_argparse(opts, varargin) ;
 
 opts.numFetchThreads = 12 ;
@@ -31,11 +35,11 @@ opts.train = struct() ;
 
 opts.piecewise = true;  % piecewise training (+bbox regression)
 opts.train.gpus = [] ;
-opts.train.batchSize = 4 ;
-opts.train.numSubBatches = 2 ;
-opts.train.continue = true ;
+opts.train.batchSize = 2 ;
+opts.train.numSubBatches = 1 ;
+opts.train.continue = true;
 opts.train.prefetch = false ; % does not help for two images in a batch
-opts.train.learningRate = 1e-3 / 64 * [ones(1,6) 0.1*ones(1,6) 0.05*ones(1,3)];
+opts.train.learningRate = 1e-3 / 64 * [1*ones(1,6) 0.1*ones(1,6) 0.01*ones(1,3)];
 opts.train.weightDecay = 0.0005 ;
 % opts.train.numEpochs = 20 ;
 opts.train.derOutputs = {'losscls', 1, 'lossbbox', 1} ;
@@ -50,11 +54,11 @@ if ~isfield(opts.train, 'gpus'), opts.train.gpus = []; end;
 % -------------------------------------------------------------------------
 %                                                    Network initialization
 % -------------------------------------------------------------------------
-net = fast_rcnn_init_resnet(...
+net = fast_rcnn_init_multiscale(...
   'piecewise',opts.piecewise, ...
-  'layer', opts.layer);
+  'modelPath',opts.modelPath);
 
-if exist(opts.imdbPath,'file') == 2
+ if exist(opts.imdbPath,'file') == 2
   fprintf('Loading imdb...');
   imdb = load(opts.imdbPath) ;
 else
@@ -84,6 +88,7 @@ bopts = net.meta.normalization;
 bopts.useGpu = numel(opts.train.gpus) >  0 ;
 bopts.numFgRoisPerImg = 16;
 bopts.numRoisPerImg = 64;
+% bopts.imgSize = 448 ;
 bopts.maxScale = 1000;
 bopts.scale = 600;
 bopts.bgLabel = numel(imdb.classes.name)+1;
@@ -165,13 +170,19 @@ end
 
 net.rebuild();
 
-pfc8 = net.getLayerIndex('prediction') ;
+pfc8 = net.getLayerIndex('predictions') ;
+if isnan(pfc8)
+    pfc8 = net.getLayerIndex('predictions') ;
+end
 net.addLayer('probcls',dagnn.SoftMax(),net.layers(pfc8).outputs{1},...
   'probcls',{});
 
 net.vars(net.getVarIndex('probcls')).precious = true ;
 
-idxBox = net.getLayerIndex('predbbox') ;
+idxBox = net.getLayerIndex('predbboxs') ;
+if isnan(idxBox)
+    idxBox = net.getLayerIndex('predbbox') ;
+end
 if ~isnan(idxBox)
   net.vars(net.layers(idxBox).outputIndexes(1)).precious = true ;
   % incorporate mean and std to bbox regression parameters

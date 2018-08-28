@@ -17,7 +17,7 @@ opts.dataDir   = fullfile(vl_rootnn, 'data') ;
 [opts, varargin] = vl_argparse(opts, varargin) ;
 
 opts.sswDir    = fullfile(opts.dataDir, 'SSW');
-opts.expDir    = fullfile(opts.dataDir, 'fast-rcnn-vgg16-pascal07') ;
+opts.expDir    = fullfile(opts.dataDir, 'fast-rcnn-resnet50a-nobn-2.5-pascal07') ;
 [opts, varargin] = vl_argparse(opts, varargin) ;
 
 opts.imdbPath  = fullfile(opts.expDir, 'imdb.mat');
@@ -72,6 +72,7 @@ bopts.maxScale = 1000;
 bopts.bgLabel = 21;
 bopts.visualize = 0;
 bopts.scale = 600;
+% bopts.imgSize = 448 ;
 bopts.interpolation = net.meta.normalization.interpolation;
 bopts.numThreads = opts.numFetchThreads;
 
@@ -81,6 +82,14 @@ bopts.numThreads = opts.numFetchThreads;
 VOCinit;
 VOCopts.testset='test';
 
+% set=[]
+% for i=1:500
+%     if imdb.images.set(i)==3
+%         set(end+1)= i ;
+%     end
+% end
+% 
+% testIdx = set.' ;
 testIdx = find(imdb.images.set == 3) ;
 cls_probs  = cell(1,numel(testIdx)) ;
 box_deltas = cell(1,numel(testIdx)) ;
@@ -136,9 +145,10 @@ for c = 1:numel(VOCopts.classes)
 
     % back-transform bounding box corrections
     delta = box_deltas{t}(4*(q-1)+1:4*q,si)';
-    pred_box = bbox_transform_inv(pbox, delta);
-
     im_size = imdb.images.size(testIdx(t),[2 1]);
+    
+    pred_box = bbox_transform_inv(pbox, delta);   
+    % pred_box = bbox_transform_inv(pbox, delta, bopts.imgSize, im_size);
     pred_box = bbox_clip(round(pred_box), im_size);
 
     % Threshold. Heuristic: keep at most 100 detection per class per image

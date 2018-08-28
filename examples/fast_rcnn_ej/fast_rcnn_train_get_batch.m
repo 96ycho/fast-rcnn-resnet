@@ -106,8 +106,13 @@ if isempty(pboxes)
   warning('No gt box\n');
 end
 
+% 2 classifiers
+% -------------------------------------------------------------------------
 labels = vertcat(plabels{:});
+labels = vertcat(labels, labels);
 targets = vertcat(ptargets{:});
+targets = vertcat(targets, targets);
+% -------------------------------------------------------------------------
 
 % rescale images and rois
 rois = [];
@@ -128,8 +133,8 @@ boxOut(:,4) = scale2 * (boxIn(:,4)-1) + 1;
 
 boxOut = [max(1,round(boxOut(:,1))),...
   max(1,round(boxOut(:,2))),...
-  min(szOut(1),round(boxOut(:,3))),...
-  min(szOut(2),round(boxOut(:,4)))];
+  min(szOut(2),round(boxOut(:,3))),...
+  min(szOut(1),round(boxOut(:,4)))];
 
 end
 
@@ -151,11 +156,11 @@ for b=1:numel(batch)
     imre{b} = ims{b};
   end
 
-  % image resize [224,224,3]
-  ssize=size(ims{b});
-  factor1 = 224/ssize(1);
-  factor2 = 224/ssize(2);
-  imre{b} = imresize(ims{b}, [224 224]);
+  % image resize [448,448,3]
+%   ssize=size(ims{b});
+%   factor1 = opts.imgSize/ssize(1);
+%   factor2 = opts.imgSize/ssize(2);
+%   imre{b} = imresize(ims{b}, [opts.imgSize opts.imgSize]);
   
   if imdb.boxes.flip(batch(b))
     im = imre{b};
@@ -174,8 +179,8 @@ for b=1:numel(batch)
   end
 
   nB = size(bbox,1);
-  % tbbox = bbox_scale(bbox,factor,[imreSize(2) imreSize(1)]);
-  tbbox = bbox_resize(bbox,factor2,factor1,[imreSize(2) imreSize(1)]);
+  tbbox = bbox_scale(bbox,factor,[imreSize(2) imreSize(1)]);
+  % tbbox = bbox_resize(bbox,factor2,factor1,[imreSize(2) imreSize(1)]);
   if any(tbbox(:)<=0)
     error('tbbox error');
   end
